@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bike Game Simulation</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            flex-direction: column;
+        }
+        canvas {
+            border: 2px solid #333;
+            background-color: #ddd;
+        }
+        #game-info {
+            margin-top: 20px;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+    <div id="game-info">Score: <span id="score">0</span></div>
+    
+    <script>
+        // Game constants
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 400;
+        const ROAD_HEIGHT = 300;
+        const ROAD_Y = 50;
+        const BIKE_WIDTH = 30;
+        const BIKE_HEIGHT = 20;
+        const OBJECT_SIZE = 15;
+        const GAME_SPEED = 5;
+        const NUM_OIL_SPILLS = 10;
+        const NUM_GREEN_DOTS = 15;
+        const NUM_RED_OBSTACLES = 5;
+
+        // Game variables
+        let canvas = document.getElementById('gameCanvas');
+        let ctx = canvas.getContext('2d');
+        let scoreElement = document.getElementById('score');
+        let score = 0;
+        let gameOver = false;
+        let animationId;
+
+        // Bike object
+        const bike = {
+            x: 50,
+            y: ROAD_Y + ROAD_HEIGHT / 2,
+            width: BIKE_WIDTH,
+            height: BIKE_HEIGHT,
+            speed: 0,
+            verticalSpeed: 0,
+            draw() {
+                ctx.fillStyle = 'blue';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Add simple details to make it look more like a bike
+                ctx.fillStyle = 'lightblue';
+                ctx.beginPath();
+                ctx.arc(this.x + this.width - 5, this.y + this.height / 2, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(this.x + 5, this.y + this.height / 2, 5, 0, Math.PI * 2);
+                ctx.fill();
+            },
+            update() {
+                // Update bike position based on user input
+                this.y += this.verticalSpeed;
+                
+                // Keep bike within road boundaries
+                if (this.y < ROAD_Y) {
+                    this.y = ROAD_Y;
+                }
+                if (this.y > ROAD_Y + ROAD_HEIGHT - this.height) {
+                    this.y = ROAD_Y + ROAD_HEIGHT - this.height;
+                }
+            }
+        };
+
+        // Object classes
+        class RoadObject {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.width = OBJECT_SIZE;
+                this.height = OBJECT_SIZE;
+                this.type = type; // 'oil', 'dot', or 'obstacle'
+                this.speed = GAME_SPEED;
+            }
+
+            draw() {
+                switch (this.type) {
+                    case 'oil':
+                        ctx.fillStyle = 'black';
+                        ctx.fillRect(this.x, this.y, this.width, this.height);
+                        break;
+                    case 'dot':
+                        ctx.fillStyle = 'green';
+                        ctx.beginPath();
+                        ctx.arc(this.x + this.width / 2, this.y + this.height / 2, this.width / 2, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case 'obstacle':
+                        ctx.fillStyle = 'red';
+                        ctx.fillRect(this.x, this.y, this.width, this.height);
+                        break;
+                }
+            }
+
+            update() {
+                this.x -= this.speed;
+            }
+
+            isOffScreen() {
+                return this.x + this.width < 0;
+            }
+
+            checkCollision(bike) {
+                return (
+                    this.x < bike.x + bike.width &&
+                    this.x + this.width > bike.x &&
+                    this.y < bike.y + bike.height &&
+                    this.y + this.height > bike.y
+                );
+            }
+        }
+
+        // Game objects
+        let roadObjects = [];
+
+        // Initialize game objects
+        function initializeGame() {
+            score = 0;
+            scoreElement.textContent = score;
+            gameOver = false;
+            roadObjects = [];
+            
+            // Create oil spills
+            for (let i = 0; i < NUM_OIL_SPILLS; i++) {
+                createRoadObject('oil');
+            }
+            
+            // Create green dots
+            for (let i = 0; i < NUM_GREEN_DOTS; i++) {
+                createRoadObject('dot');
+            }
+            
+            // Create red obstacles
+            for (let i = 0; i < NUM_RED_OBSTACLES; i++) {
+                createRoadObject('obstacle');
+            }
+        }
+
+        function createRoadObject(type) {
+            const x = CANVAS_WIDTH + Math.random() * CANVAS_WIDTH;
+            const y = ROAD_Y + Math.random() * (ROAD_HEIGHT - OBJECT_SIZE);
+            roadObjects.push(new RoadObject(x, y, type));
+        }
+
+        // Handle keyboard input
+        document.addEventListener('keydown', (event) => {
+            if (gameOver && event.key === ' ') {
+                initializeGame();
+                gameLoop();
+                return;
+            }
+            
+            switch (event.key) {
+                case 'ArrowUp':
+                    bike.verticalSpeed = -5;
+                    break;
+                case 'ArrowDown':
+                    bike.verticalSpeed = 5;
+                    break;
+            }
+        });
+
+        document.addEventListener('keyup', (event) => {
+            if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                bike.verticalSpeed = 0;
+            }
+        });
+
+        // Draw game elements
+        function drawGame() {
+            // Clear canvas
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // Draw road
+            ctx.fillStyle = '#666';
+            ctx.fillRect(0, ROAD_Y, CANVAS_WIDTH, ROAD_HEIGHT);
+            
+            // Draw road markings
+            ctx.strokeStyle = 'white';
+            ctx.setLineDash([20, 15]);
+            ctx.beginPath();
+            ctx.moveTo(0, ROAD_Y + ROAD_HEIGHT / 2);
+            ctx.lineTo(CANVAS_WIDTH, ROAD_Y + ROAD_HEIGHT / 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Draw bike
+            bike.draw();
+            
+            // Draw road objects
+            roadObjects.forEach(obj => obj.draw());
+            
+            // Draw game over message
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = '36px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+                ctx.font = '24px Arial';
+                ctx.fillText(`Final Score: ${score}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 40);
+                ctx.fillText('Press SPACE to restart', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 80);
+            }
+        }
+
+        // Update game state
+        function updateGame() {
+            if (gameOver) return;
+            
+            // Update bike position
+            bike.update();
+            
+            // Update road objects
+            for (let i = roadObjects.length - 1; i >= 0; i--) {
+                const obj = roadObjects[i];
+                obj.update();
+                
+                // Check for collisions
+                if (obj.checkCollision(bike)) {
+                    switch (obj.type) {
+                        case 'oil':
+                            score = Math.max(0, score - 1);
+                            scoreElement.textContent = score;
+                            roadObjects.splice(i, 1);
+                            createRoadObject('oil');
+                            break;
+                        case 'dot':
+                            score += 1;
+                            scoreElement.textContent = score;
+                            roadObjects.splice(i, 1);
+                            createRoadObject('dot');
+                            break;
+                        case 'obstacle':
+                            gameOver = true;
+                            cancelAnimationFrame(animationId);
+                            break;
+                    }
+                }
+                
+                // Remove objects that are off-screen and create new ones
+                if (obj.isOffScreen()) {
+                    roadObjects.splice(i, 1);
+                    createRoadObject(obj.type);
+                }
+            }
+            
+            // Randomly add new objects occasionally
+            if (Math.random() < 0.01) {
+                const types = ['oil', 'dot', 'obstacle'];
+                const randomType = types[Math.floor(Math.random() * types.length)];
+                createRoadObject(randomType);
+            }
+        }
+
+        // Game loop
+        function gameLoop() {
+            updateGame();
+            drawGame();
+            
+            if (!gameOver) {
+                animationId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Start the game
+        initializeGame();
+        gameLoop();
+    </script>
+</body>
+</html>
